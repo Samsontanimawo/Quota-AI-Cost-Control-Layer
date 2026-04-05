@@ -1,0 +1,62 @@
+# ============================================================
+# Quota — Docker Compose (Development + Production)
+# ============================================================
+# Services:
+#   quota  — The Quota API server
+#   redis  — Optional cache backend (enable via REDIS_ENABLED=true)
+# ============================================================
+
+version: '3.8'
+
+services:
+  quota:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      no_cache: true
+    container_name: quota-api
+    ports:
+      - "3100:3100"
+    environment:
+      - NODE_ENV=production
+      - PORT=3100
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - REDIS_ENABLED=true
+      - REDIS_URL=redis://redis:6379
+      - CACHE_TTL_SECONDS=3600
+      - CACHE_MAX_SIZE=10000
+      - DEFAULT_MAX_TOKENS_PER_REQUEST=100000
+      - DEFAULT_MAX_OUTPUT_TOKENS=4096
+      - DEFAULT_BUDGET_PER_KEY_DAILY_USD=50.00
+      - DEFAULT_MODEL=claude-sonnet-4-6
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - quota-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: quota-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - quota-net
+
+volumes:
+  redis-data:
+
+networks:
+  quota-net:
+    driver: bridge
